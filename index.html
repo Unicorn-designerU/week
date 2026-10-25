@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- Bezpieczeństwo: strona może łączyć się wyłącznie z Google i serwisem pogody Open-Meteo. Plik budowany skryptem build.py (przelicza skrót skryptu). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xDkRwCDCaJJDn8EOT/PDap2cOkrmjYl3WZ1wPxmjKdk=' https://accounts.google.com/gsi/client; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://oauth2.googleapis.com https://accounts.google.com/gsi/ https://api.open-meteo.com; frame-src https://accounts.google.com/gsi/; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-CpGaR+YBPjLWE+73jpZ8Ms5uGmERakqx8JbBc3yN79U=' https://accounts.google.com/gsi/client; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://oauth2.googleapis.com https://accounts.google.com/gsi/ https://api.open-meteo.com; frame-src https://accounts.google.com/gsi/; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -290,6 +290,8 @@ const CLIENT_ID = '85966857973-0r7eehkifeqgj8e370m52hrdv64o7qj8.apps.googleuserc
 const HOLIDAYS_ID = 'pl.polish#holiday@group.v.calendar.google.com';
 const ZOSIA_CAL = /zosia/i;                 // kalendarz z planem lekcji, rozpoznawany po nazwie
 const WEATHER = { lat: 52.268, lon: 20.983 }; // Warszawa Żoliborz
+// Wspólny arkusz (dostęp mają tylko osoby, którym go udostępniono w Google Sheets)
+const DEFAULT_SHEET = '14dcbAku0yNJ3WgGsivgdKldKu6u9XH8uFbruCrgteKg';
 const SOON_DAYS = 90;                      // jak daleko patrzy „Najbliższe”
 /* ======================================================== */
 
@@ -343,7 +345,7 @@ const SOON_DAYS = 90;                      // jak daleko patrzy „Najbliższe�
     calendars: store.get('nt.cals', []),          // [{id, summary, color, primary, canWrite, zosia, birthdays}]
     email: store.get('nt.email', ''),
     prefs: store.get('nt.prefs', { week: {}, count: {}, name: '', addCal: '' }),
-    sheetId: store.get('nt.sheet', ''),
+    sheetId: (() => { const v = store.get('nt.sheet', ''); return v === '__none__' ? '' : (v || DEFAULT_SHEET); })(),
     bundle: null,       // {from, to, events, zLessons, at}
     soon: store.get('nt.soon', null),     // {items, at}
     weather: store.get('nt.weather', null), // {days: {ymd: {...}}, at}
@@ -675,7 +677,7 @@ const SOON_DAYS = 90;                      // jak daleko patrzy „Najbliższe�
     try { await navigator.clipboard.writeText(link); $('set-copy').textContent = 'Skopiowano ✓'; } catch { window.prompt('Skopiuj ten link:', link); }
     setTimeout(() => { $('set-copy').textContent = 'Skopiuj link dla drugiej osoby'; }, 2500);
   };
-  $('set-unlink').onclick = () => { S.sheetId = ''; S.sheet = null; store.del('nt.sheet'); store.del('nt.sheetdata'); syncSheetInfo(); draw(); };
+  $('set-unlink').onclick = () => { S.sheetId = ''; S.sheet = null; store.set('nt.sheet', '__none__'); store.del('nt.sheetdata'); syncSheetInfo(); draw(); };
   $('set-create').onclick = async () => {
     $('set-create').disabled = true; $('set-create').textContent = 'Tworzę…';
     try { S.sheetId = await createSheet(); store.set('nt.sheet', S.sheetId); await loadSheet(); syncSheetInfo(); draw(); }
@@ -816,7 +818,8 @@ const SOON_DAYS = 90;                      // jak daleko patrzy „Najbliższe�
 
   const drawShared = () => {
     $('shared').hidden = !S.sheet;
-    $('sheeterr').hidden = !S.sheetError; $('sheeterr').textContent = S.sheetError;
+    const hint = S.sheetError || (S.token && !S.sheetId ? 'Zakupy, sprawy i rachunki pojawią się po podłączeniu wspólnego arkusza w Ustawieniach.' : S.token && S.sheetId && !S.sheet ? 'Wczytuję wspólny arkusz…' : '');
+    $('sheeterr').hidden = !hint; $('sheeterr').textContent = hint;
     if (!S.sheet) return;
     ['Zakupy', 'Sprawy'].forEach((tab) => {
       const ul = $('list-' + tab); ul.replaceChildren();
