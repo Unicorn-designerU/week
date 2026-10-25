@@ -1,6 +1,6 @@
 // Nasz tydzień — tryb offline: zawsze najpierw sieć, a bez zasięgu zapisana kopia strony.
 // Dane z Google nie są tu zapisywane (tylko pliki samej aplikacji).
-const CACHE = 'nasz-tydzien-202610251327';
+const CACHE = 'nasz-tydzien-202610251406';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
