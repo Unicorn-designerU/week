@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<!-- Bezpieczeństwo: strona może łączyć się wyłącznie z Google i serwisem pogody Open-Meteo. Plik budowany skryptem build.py (przelicza skrót skryptu). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-atS9Td2/FBO+PlVUSohVhMUmmIOo0gaB7/vcAXuv6MU=' https://accounts.google.com/gsi/client; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; connect-src 'self' https://www.googleapis.com https://sheets.googleapis.com https://oauth2.googleapis.com https://accounts.google.com/gsi/ https://api.open-meteo.com; frame-src https://accounts.google.com/gsi/; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Nasz tydzień">
+<meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
+<title>Nasz tydzień</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+  :root {
+    --bg: #f7f5f0; --panel: #ffffff; --fg: #1f1e1b; --muted: #6f6b63; --line: #e3dfd6; --soft: #f0ede6;
+    --accent: #c96442; --warn: #b4690e; --ok: #3b7d4f; --bad: #b3372e;
+    --c0: #3d6fb5; --c1: #c96442; --c2: #3b8a6e; --c3: #8a5cb8; --c4: #b58a1d; --c5: #c2477a; --c6: #4f8fa3; --c7: #7a7468;
+    --radius: 12px;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1b19; --panel: #262522; --fg: #ece9e2; --muted: #a29d93; --line: #3a3833; --soft: #2f2d29;
+      --accent: #e0805f; --warn: #e0a24a; --ok: #6cbf86; --bad: #e57368;
+      --c0: #7fa6e0; --c1: #e0805f; --c2: #6cbf9d; --c3: #b493dd; --c4: #d9b552; --c5: #e27ba5; --c6: #7fbccd; --c7: #a8a296;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1b19; --panel: #262522; --fg: #ece9e2; --muted: #a29d93; --line: #3a3833; --soft: #2f2d29;
+    --accent: #e0805f; --warn: #e0a24a; --ok: #6cbf86; --bad: #e57368;
+    --c0: #7fa6e0; --c1: #e0805f; --c2: #6cbf9d; --c3: #b493dd; --c4: #d9b552; --c5: #e27ba5; --c6: #7fbccd; --c7: #a8a296;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.4; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 20px; }
+  button, input, select { font: inherit; color: inherit; }
+  .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.big { padding: 11px 22px; font-size: 16px; }
+  .link { all: unset; cursor: pointer; color: var(--muted); font-size: 13px; text-decoration: underline; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: 30px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; font-weight: 600; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .err { color: var(--bad); font-size: 13.5px; }
+  [hidden] { display: none !important; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .range { color: var(--muted); margin-top: 2px; }
+  .status { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .status.off { color: var(--warn); }
+  .nav { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .gate { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 20px; }
+  .gate p { margin: 0; color: var(--muted); max-width: 30rem; }
+  .gate code { font-size: 13px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .gate.banner { flex-direction: row; justify-content: space-between; text-align: left; padding: 12px 16px; flex-wrap: wrap; }
+
+  /* Dziś */
+  .today { display: none; border-color: var(--fg); }
+  @media (max-width: 900px) { .today { display: flex; flex-direction: column; gap: 10px; } }
+  .today-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .today-date { font-family: var(--serif); font-size: 26px; line-height: 1.15; }
+  .today-date small { display: block; font-family: var(--sans); font-size: 13px; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: .06em; }
+  .today-wx { text-align: right; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .today-wx b { display: block; font-size: 26px; color: var(--fg); font-weight: 400; }
+  .today .ev { font-size: 16px; }
+  .today .ev-time { font-size: 13.5px; }
+
+  /* Najbliższe */
+  .soon { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  .soon-item { flex: 0 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 12px; min-width: 9.5rem; max-width: 15rem; }
+  .soon-when { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .soon-title { font-size: 14px; overflow-wrap: anywhere; margin-top: 2px; }
+  .soon-date { font-size: 12px; color: var(--muted); }
+
+  /* tydzień */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  @media (max-width: 900px) { .week { grid-template-columns: 1fr; } }
+  .day { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 9rem; min-width: 0; }
+  @media (max-width: 900px) { .day { min-height: 0; } }
+  .day.weekend { background: transparent; }
+  .day.today-box { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg) inset; }
+  .day.past { opacity: .62; }
+  .dayhead { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dayhead b { color: var(--fg); font-size: 15px; font-weight: 600; text-transform: capitalize; }
+  .dayhead .tag { color: var(--accent); font-weight: 600; }
+  .dh-right { display: inline-flex; align-items: center; gap: 6px; }
+  .plus { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: inline-grid; place-items: center; color: var(--muted); font-size: 16px; line-height: 1; }
+  .plus:hover { color: var(--fg); border-color: var(--muted); }
+  .wx { display: block; margin-top: -2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .holiday { font-size: 13px; color: var(--warn); font-weight: 600; }
+  .ev { display: grid; grid-template-columns: 8px 1fr; gap: 0 8px; font-size: 13.5px; line-height: 1.35; text-decoration: none; color: inherit; padding: 2px 0; }
+  a.ev:hover .ev-title { text-decoration: underline; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; display: inline-block; flex: none; }
+  .ev.cont .dot { border-radius: 2px; }
+  .ev-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .ev-title { overflow-wrap: anywhere; }
+  .ev-loc { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+  .school { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--c2); padding-left: 7px; line-height: 1.5; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+  .school b { color: var(--fg); font-weight: 600; }
+  .chip { all: unset; cursor: pointer; font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--fg); background: var(--soft); white-space: nowrap; }
+  .chip.mine { background: var(--c2); border-color: var(--c2); color: #fff; }
+  .chip.none { color: var(--muted); background: transparent; border-style: dashed; }
+  .meal { all: unset; cursor: pointer; font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+  .meal.none { color: var(--muted); opacity: .8; }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  /* wspólne */
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 12px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .addrow { display: flex; gap: 6px; margin-bottom: 8px; }
+  .addrow input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 8px 12px; font-size: 15px; }
+  .items { list-style: none; margin: 0; padding: 0; }
+  .items li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .items li:last-child { border-bottom: 0; }
+  .items input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ok); flex: none; }
+  .items .nm { flex: 1; overflow-wrap: anywhere; }
+  .items .by { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .items li.done .nm { text-decoration: line-through; color: var(--muted); }
+  .bill-due { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bill-due.bad { color: var(--bad); font-weight: 600; } .bill-due.warn { color: var(--warn); font-weight: 600; }
+  .amt { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+
+  /* plan Zosi */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .lessons { list-style: none; margin: 0; padding: 0; }
+  .lessons li { display: grid; grid-template-columns: 6.8rem 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .lessons li:last-child { border-bottom: 0; }
+  .lessons .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .lessons .s { border-left: 3px solid var(--c7); padding-left: 8px; }
+  .lessons .extra .s { border-left-style: dashed; }
+  .lessons small { display: block; color: var(--muted); }
+
+  /* okna */
+  dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--fg); padding: 18px; width: min(34rem, calc(100vw - 24px)); max-height: 86vh; }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h3 { margin: 0 0 4px; font-size: 17px; }
+  dialog h4 { margin: 16px 0 6px; font-size: 14px; }
+  dialog p { margin: 0 0 10px; color: var(--muted); font-size: 13.5px; }
+  .caltable { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .caltable th { text-align: center; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px; }
+  .caltable th:first-child { text-align: left; }
+  .caltable td { padding: 6px 4px; border-top: 1px solid var(--line); }
+  .caltable td:not(:first-child) { text-align: center; width: 5.5rem; }
+  .caltable input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .caltable .nm { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+  .field input, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 15px; color: var(--fg); width: 100%; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 10px; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .btnrow { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
+  .foot { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+  .loading { opacity: .55; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Nasz tydzień</h1>
+      <div class="range" id="range"></div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="nav">
+      <button class="btn" id="prev" aria-label="Poprzedni tydzień">‹</button>
+      <button class="btn" id="thisweek">Ten tydzień</button>
+      <button class="btn" id="next" aria-label="Następny tydzień">›</button>
+      <button class="btn" id="refresh" aria-label="Odśwież">↻</button>
+    </div>
+  </header>
+
+  <section class="card gate" id="gate" hidden>
+    <div id="gate-text"></div>
+    <button class="btn primary big" id="signin" hidden>Zaloguj przez Google</button>
+  </section>
+
+  <section class="card today" id="today" hidden></section>
+
+  <section id="soonbox" hidden>
+    <h2 style="margin-bottom:8px">Najbliższe</h2>
+    <div class="soon" id="soon"></div>
+  </section>
+
+  <section id="weekbox" hidden>
+    <div class="legend" id="legend"></div>
+    <div class="week" id="week"></div>
+    <div class="err" id="weekerr" hidden></div>
+  </section>
+
+  <section class="grid3" id="shared" hidden>
+    <div class="card">
+      <div class="card-head"><h2>Zakupy</h2><button class="link" data-clear="Zakupy">Usuń kupione</button></div>
+      <div class="addrow"><input id="add-Zakupy" placeholder="Dopisz produkt…" enterkeyhint="done" autocomplete="off"><button class="btn" data-add="Zakupy">Dodaj</button></div>
+      <ul class="items" id="list-Zakupy"></ul>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Sprawy do zrobienia</h2><button class="link" data-clear="Sprawy">Usuń zrobione</button></div>
+      <div class="addrow"><input id="add-Sprawy" placeholder="Dopisz sprawę…" enterkeyhint="done" autocomplete="off"><button class="btn" data-add="Sprawy">Dodaj</button></div>
+      <ul class="items" id="list-Sprawy"></ul>
+    </div>
+    <div class="card" id="billcard">
+      <div class="card-head"><h2>Rachunki do zapłaty</h2></div>
+      <ul class="items" id="bills"></ul>
+    </div>
+  </section>
+  <div class="err" id="sheeterr" hidden></div>
+
+  <section class="card" id="zosia" hidden>
+    <div class="card-head">
+      <h2>Plan lekcji Zosi</h2>
+      <div class="tabs" role="tablist" id="ztabs"></div>
+    </div>
+    <ul class="lessons" id="zlist"></ul>
+  </section>
+
+  <footer class="foot">
+    <span id="who"></span>
+    <button class="link" id="settings" hidden>Ustawienia</button>
+    <button class="link" id="signout" hidden>Wyloguj</button>
+    <button class="link" id="theme">Motyw</button>
+  </footer>
+</div>
+
+<dialog id="setdlg">
+  <h3>Ustawienia</h3>
+  <p>Zapisują się na tym urządzeniu.</p>
+  <div class="field"><span>Twoje imię (widoczne przy odbiorze Zosi i na listach)</span><input id="set-name" autocomplete="off"></div>
+  <h4>Kalendarze</h4>
+  <table class="caltable"><thead><tr><th>Kalendarz</th><th>W tygodniu</th><th>Odliczanie</th></tr></thead><tbody id="set-cals"></tbody></table>
+  <h4>Wspólny arkusz</h4>
+  <p id="set-sheetinfo"></p>
+  <div class="btnrow">
+    <button class="btn" id="set-create">Utwórz nowy arkusz</button>
+    <button class="btn" id="set-open" hidden>Otwórz arkusz</button>
+    <button class="btn" id="set-copy" hidden>Skopiuj link dla drugiej osoby</button>
+    <button class="btn" id="set-unlink" hidden>Odłącz</button>
+  </div>
+  <div class="field"><span>…albo wklej link do istniejącego arkusza</span><input id="set-sheet" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off"></div>
+  <div class="dlg-foot">
+    <button class="btn" id="set-cancel">Anuluj</button>
+    <button class="btn primary" id="set-save">Zapisz</button>
+  </div>
+</dialog>
+
+<dialog id="evdlg">
+  <h3>Nowe wydarzenie</h3>
+  <div class="field"><span>Tytuł</span><input id="ev-title" autocomplete="off"></div>
+  <div class="field"><span>Kalendarz</span><select id="ev-cal"></select></div>
+  <label class="check"><input type="checkbox" id="ev-allday"> Cały dzień</label>
+  <div class="row2">
+    <div class="field"><span>Od (data)</span><input type="date" id="ev-sd"></div>
+    <div class="field" id="ev-st-f"><span>Godzina</span><input type="time" id="ev-st" value="09:00"></div>
+  </div>
+  <div class="row2">
+    <div class="field"><span>Do (data)</span><input type="date" id="ev-ed"></div>
+    <div class="field" id="ev-et-f"><span>Godzina</span><input type="time" id="ev-et" value="10:00"></div>
+  </div>
+  <div class="field"><span>Miejsce (opcjonalnie)</span><input id="ev-loc" autocomplete="off"></div>
+  <div class="err" id="ev-err" hidden></div>
+  <div class="dlg-foot">
+    <button class="btn" id="ev-cancel">Anuluj</button>
+    <button class="btn primary" id="ev-save">Dodaj</button>
+  </div>
+</dialog>
+
+<script>
+/* ===================== KONFIGURACJA ===================== */
+// Identyfikator klienta OAuth z Google Cloud (kończy się na .apps.googleusercontent.com)
+const CLIENT_ID = 'WKLEJ_TUTAJ_CLIENT_ID.apps.googleusercontent.com';
+const HOLIDAYS_ID = 'pl.polish#holiday@group.v.calendar.google.com';
+const ZOSIA_CAL = /zosia/i;                 // kalendarz z planem lekcji, rozpoznawany po nazwie
+const WEATHER = { lat: 52.268, lon: 20.983 }; // Warszawa Żoliborz
+const SOON_DAYS = 90;                      // jak daleko patrzy „Najbliższe”
+/* ======================================================== */
+
+(() => {
+  const SCOPES = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/spreadsheets'
+  ].join(' ');
+  const TZ = 'Europe/Warsaw';
+  const TABS = {
+    Zakupy: ['id', 'nazwa', 'zrobione', 'kto', 'kiedy'],
+    Sprawy: ['id', 'nazwa', 'zrobione', 'kto', 'kiedy'],
+    Odbiory: ['data', 'kto'],
+    'Jadłospis': ['data', 'obiad'],
+    Rachunki: ['id', 'termin', 'od', 'kwota', 'opis', 'zapłacone']
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} }
+  };
+
+  // ---------- daty ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const parseYmd = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const mondayOf = (d) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
+  const defaultMonday = () => { const t = new Date(); const wd = t.getDay(); const m = mondayOf(t); return (wd === 0 || wd === 6) ? addDays(m, 7) : m; };
+  const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+  const fTime = new Intl.DateTimeFormat('pl-PL', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  const fWawDate = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const fWd = new Intl.DateTimeFormat('pl-PL', { weekday: 'long' });
+  const fWdS = new Intl.DateTimeFormat('pl-PL', { weekday: 'short' });
+  const fDay = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' });
+  const fDayL = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long' });
+  const fDayY = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short', year: 'numeric' });
+  const fStamp = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const fPLN = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' });
+  const todayKey = () => ymd(new Date());
+
+  // ---------- stan ----------
+  const S = {
+    monday: defaultMonday(),
+    token: null,
+    calendars: store.get('nt.cals', []),          // [{id, summary, color, primary, canWrite, zosia, birthdays}]
+    email: store.get('nt.email', ''),
+    prefs: store.get('nt.prefs', { week: {}, count: {}, name: '', addCal: '' }),
+    sheetId: store.get('nt.sheet', ''),
+    bundle: null,       // {from, to, events, zLessons, at}
+    soon: store.get('nt.soon', null),     // {items, at}
+    weather: store.get('nt.weather', null), // {days: {ymd: {...}}, at}
+    sheet: store.get('nt.sheetdata', null), // dane z arkusza
+    offline: false, sheetError: '', weekError: ''
+  };
+  const prefOn = (kind, id) => (S.prefs[kind] || {})[id] !== false;
+  const myName = () => (S.prefs.name || '').trim() || (S.email ? S.email.split('@')[0] : 'ja');
+  const zosiaCal = () => S.calendars.find((c) => c.zosia);
+  const weekCals = () => S.calendars.filter((c) => !c.zosia && prefOn('week', c.id));
+  const cacheKey = (mon) => 'nt.week.' + ymd(mon);
+  const loadBundle = () => { S.bundle = store.get(cacheKey(S.monday), null); };
+  const saveBundle = () => {
+    const k = cacheKey(S.monday); store.set(k, S.bundle);
+    const keys = store.get('nt.weekkeys', []).filter((x) => x !== k); keys.push(k);
+    while (keys.length > 4) store.del(keys.shift());
+    store.set('nt.weekkeys', keys);
+  };
+
+  // link do arkusza przekazany w adresie (#arkusz=ID) — zapisz i usuń z paska adresu
+  { const m = location.hash.match(/arkusz=([A-Za-z0-9_-]{20,})/); if (m) { S.sheetId = m[1]; store.set('nt.sheet', S.sheetId); store.del('nt.sheetdata'); S.sheet = null; history.replaceState(null, '', location.pathname + location.search); } }
+
+  // ---------- motyw ----------
+  const applyTheme = () => { const t = store.get('nt.theme', null); if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; };
+  applyTheme();
+  $('theme').onclick = () => { const c = store.get('nt.theme', null); const n = c === null ? 'dark' : c === 'dark' ? 'light' : null; if (n) store.set('nt.theme', n); else store.del('nt.theme'); applyTheme(); };
+
+  // ---------- wydarzenia ----------
+  const norm = (e, cal) => ({
+    id: e.id, calId: cal.id, color: cal.color,
+    title: e.summary || '(bez tytułu)',
+    start: e.start.dateTime || e.start.date,
+    end: (e.end && (e.end.dateTime || e.end.date)) || e.start.dateTime || e.start.date,
+    all_day: !e.start.dateTime,
+    location: e.location || '',
+    link: e.htmlLink || '',
+    birthday: e.eventType === 'birthday' || !!cal.birthdays,
+    holiday: !!cal.holiday
+  });
+  const eventDays = (e) => {
+    let startKey, endKey;
+    if (e.all_day) { startKey = e.start.slice(0, 10); endKey = e.end.slice(0, 10); }
+    else {
+      startKey = fWawDate.format(new Date(e.start));
+      const endDate = new Date(e.end);
+      endKey = fWawDate.format(endDate);
+      if (!(fTime.format(endDate) === '00:00' && endKey > startKey)) endKey = ymd(addDays(parseYmd(endKey), 1));
+    }
+    const out = []; let cur = parseYmd(startKey);
+    while (ymd(cur) < endKey && out.length < 120) { out.push(ymd(cur)); cur = addDays(cur, 1); }
+    return out.length ? out : [startKey];
+  };
+  const timeLabel = (e, days, key) => {
+    const n = days.length, i = days.indexOf(key);
+    const part = n > 1 ? ` · dzień ${i + 1}/${n}` : '';
+    if (e.all_day) return 'cały dzień' + part;
+    const st = fTime.format(new Date(e.start)), en = fTime.format(new Date(e.end));
+    if (n === 1) return `${st}–${en}`;
+    if (i === 0) return `od ${st}` + part;
+    if (i === n - 1) return `do ${en}` + part;
+    return 'cały dzień' + part;
+  };
+
+  // ---------- Google ----------
+  class AuthError extends Error {}
+  const gfetch = async (url, opts = {}) => {
+    if (!S.token) throw new AuthError('no token');
+    let r;
+    try {
+      r = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + S.token.access, ...(opts.body ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+    } catch (e) { S.offline = true; throw e; }
+    S.offline = false;
+    if (r.status === 401) { dropToken(); throw new AuthError('401'); }
+    if (!r.ok) { const err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
+    return r.status === 204 ? null : r.json();
+  };
+  const cal = (path, params) => {
+    const u = new URL('https://www.googleapis.com/calendar/v3/' + path);
+    Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
+    return gfetch(u);
+  };
+  const dropToken = () => { S.token = null; store.del('nt.token'); draw(); };
+
+  let tokenClient = null;
+  const initAuth = () => {
+    if (CLIENT_ID.startsWith('WKLEJ')) return;
+    if (!window.google || !google.accounts || !google.accounts.oauth2) { setTimeout(initAuth, 200); return; }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: (resp) => {
+        if (resp.error) { $('gate-text').replaceChildren(el('p', 'err', 'Nie udało się zalogować: ' + resp.error)); return; }
+        S.token = { access: resp.access_token, exp: Date.now() + (Number(resp.expires_in) - 60) * 1000 };
+        store.set('nt.token', S.token); store.set('nt.signedin', true);
+        refreshAll();
+      }
+    });
+    $('signin').hidden = false;
+  };
+  $('signin').onclick = () => tokenClient && tokenClient.requestAccessToken({ prompt: store.get('nt.signedin', false) ? '' : 'consent' });
+  $('signout').onclick = () => {
+    if (S.token && window.google) google.accounts.oauth2.revoke(S.token.access, () => {});
+    Object.keys(localStorage).filter((k) => k.startsWith('nt.') && k !== 'nt.theme').forEach((k) => store.del(k));
+    location.reload();
+  };
+
+  // ---------- kalendarze ----------
+  const PALETTE = ['var(--c0)', 'var(--c1)', 'var(--c3)', 'var(--c4)', 'var(--c5)', 'var(--c6)', 'var(--c7)', 'var(--c2)'];
+  const loadCalendars = async () => {
+    const res = await cal('users/me/calendarList', { maxResults: 250, minAccessRole: 'reader' });
+    const items = (res.items || []).filter((c) => !c.deleted && c.id !== HOLIDAYS_ID && !/#holiday@|#weeknum@/.test(c.id));
+    items.sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0) || (a.summaryOverride || a.summary || '').localeCompare(b.summaryOverride || b.summary || '', 'pl'));
+    let i = 0;
+    S.calendars = items.map((c) => {
+      const birthdays = /#contacts@/.test(c.id);
+      const summary = birthdays ? 'Urodziny' : c.primary ? 'Mój kalendarz' : (c.summaryOverride || c.summary || c.id);
+      const zosia = ZOSIA_CAL.test(summary);
+      return { id: c.id, summary, primary: !!c.primary, canWrite: c.accessRole === 'owner' || c.accessRole === 'writer', zosia, birthdays,
+        color: zosia ? 'var(--c2)' : birthdays ? 'var(--c5)' : PALETTE[i++ % PALETTE.length] };
+    });
+    const me = items.find((c) => c.primary);
+    if (me) { S.email = me.id; store.set('nt.email', S.email); }
+    store.set('nt.cals', S.calendars);
+  };
+  const fetchCal = async (c, from, to, limit = 250) => {
+    const out = []; let pageToken = '';
+    do {
+      const p = { timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: limit, timeZone: TZ };
+      if (pageToken) p.pageToken = pageToken;
+      const res = await cal('calendars/' + encodeURIComponent(c.id) + '/events', p);
+      (res.items || []).filter((e) => e.status !== 'cancelled').forEach((e) => out.push(norm(e, c)));
+      pageToken = res.nextPageToken || '';
+    } while (pageToken && out.length < 1000);
+    return out;
+  };
+
+  // tydzień (+ dziś, jeśli wypada tuż obok)
+  const weekRange = () => {
+    let from = S.monday, to = addDays(S.monday, 7);
+    const t = startOfDay(new Date());
+    if (t < from && from - t <= 7 * 86400000) from = t;
+    if (t >= to && t - to < 7 * 86400000) to = addDays(t, 1);
+    return { from, to };
+  };
+  const fetchWeek = async () => {
+    const { from, to } = weekRange();
+    const holidays = { id: HOLIDAYS_ID, summary: 'Święta', color: 'var(--warn)', holiday: true };
+    const zc = zosiaCal();
+    const cals = weekCals();
+    const jobs = [...cals, holidays, ...(zc ? [zc] : [])];
+    const res = await Promise.allSettled(jobs.map((c) => fetchCal(c, from, to)));
+    if (res.some((r) => r.status === 'rejected' && r.reason instanceof AuthError)) return;
+    const failed = jobs.filter((c, i) => res[i].status === 'rejected').map((c) => c.summary);
+    if (failed.length === jobs.length && S.offline) return; // brak sieci — zostaw zapisany tydzień
+    const all = res.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    const zEv = zc ? all.filter((e) => e.calId === zc.id) : [];
+    S.bundle = {
+      from: ymd(from), to: ymd(to), at: Date.now(),
+      events: all.filter((e) => !zc || e.calId !== zc.id),
+      zLessons: zEv.filter((e) => !e.all_day).map((e) => { const key = fWawDate.format(new Date(e.start)); return { key, wd: parseYmd(key).getDay(), start: fTime.format(new Date(e.start)), end: fTime.format(new Date(e.end)), subject: e.title, place: e.location }; })
+    };
+    S.weekError = failed.length ? 'Nie udało się wczytać: ' + failed.join(', ') : '';
+    saveBundle();
+  };
+
+  // najbliższe ważne rzeczy
+  const fetchSoon = async () => {
+    const from = startOfDay(new Date()), to = addDays(from, SOON_DAYS);
+    const cals = S.calendars.filter((c) => !c.zosia && prefOn('count', c.id));
+    const res = await Promise.allSettled(cals.map((c) => fetchCal(c, from, to, 100)));
+    if (res.some((r) => r.status === 'rejected' && r.reason instanceof AuthError)) return;
+    if (res.length && res.every((r) => r.status === 'rejected')) return;
+    const tk = todayKey();
+    const items = res.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+      .filter((e) => e.birthday || e.all_day || eventDays(e).length > 1)
+      .map((e) => { const d = eventDays(e); return { title: e.title, first: d[0], last: d[d.length - 1], birthday: e.birthday, color: e.color, link: e.link }; })
+      .filter((x) => x.last >= tk);
+    const seen = new Set();
+    S.soon = { at: Date.now(), items: items.sort((a, b) => a.first.localeCompare(b.first)).filter((x) => { const k = x.title + x.first; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10) };
+    store.set('nt.soon', S.soon);
+  };
+
+  // ---------- pogoda ----------
+  const WX = (c) => c === 0 ? ['☀️', 'słonecznie'] : c <= 2 ? ['🌤️', 'przejaśnienia'] : c === 3 ? ['☁️', 'pochmurno'] : c <= 48 ? ['🌫️', 'mgła'] : c <= 57 ? ['🌦️', 'mżawka'] : c <= 67 ? ['🌧️', 'deszcz'] : c <= 77 ? ['🌨️', 'śnieg'] : c <= 82 ? ['🌦️', 'przelotny deszcz'] : c <= 86 ? ['🌨️', 'przelotny śnieg'] : ['⛈️', 'burza'];
+  const fetchWeather = async () => {
+    if (S.weather && Date.now() - S.weather.at < 3600 * 1000) return;
+    const u = new URL('https://api.open-meteo.com/v1/forecast');
+    Object.entries({ latitude: WEATHER.lat, longitude: WEATHER.lon, daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max', timezone: TZ, forecast_days: 16 }).forEach(([k, v]) => u.searchParams.set(k, v));
+    try {
+      const r = await fetch(u); if (!r.ok) return;
+      const j = await r.json(); const d = j.daily || {}; const days = {};
+      (d.time || []).forEach((t, i) => { days[t] = { code: d.weather_code[i], max: d.temperature_2m_max[i], min: d.temperature_2m_min[i], pop: d.precipitation_probability_max[i] }; });
+      S.weather = { at: Date.now(), days }; store.set('nt.weather', S.weather);
+    } catch {}
+  };
+  const wxShort = (key) => {
+    const w = S.weather && S.weather.days[key]; if (!w) return null;
+    const s = el('span', 'wx', `${WX(w.code)[0]} ${Math.round(w.max)}°/${Math.round(w.min)}°${w.pop >= 20 ? ` · 💧${w.pop}%` : ''}`);
+    s.title = WX(w.code)[1]; return s;
+  };
+
+  // ---------- arkusz ----------
+  const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/';
+  const loadSheet = async () => {
+    if (!S.sheetId) { S.sheet = null; return; }
+    const u = new URL(SHEETS + S.sheetId + '/values:batchGet');
+    Object.keys(TABS).forEach((t) => u.searchParams.append('ranges', `'${t}'!A2:F`));
+    try {
+      const res = await gfetch(u);
+      const v = {}; (res.valueRanges || []).forEach((vr, i) => { v[Object.keys(TABS)[i]] = vr.values || []; });
+      const bool = (x) => String(x || '').toUpperCase() === 'TRUE';
+      const list = (rows) => rows.map((r, i) => ({ row: i + 2, id: r[0] || '', name: r[1] || '', done: bool(r[2]), by: r[3] || '', at: r[4] || '' })).filter((x) => x.name);
+      const keyed = (rows) => { const m = {}; rows.forEach((r, i) => { if (r[0]) m[String(r[0]).slice(0, 10)] = { row: i + 2, val: r[1] || '' }; }); return m; };
+      S.sheet = {
+        at: Date.now(),
+        Zakupy: list(v.Zakupy || []), Sprawy: list(v.Sprawy || []),
+        Odbiory: keyed(v.Odbiory || []), 'Jadłospis': keyed(v['Jadłospis'] || []),
+        Rachunki: (v.Rachunki || []).map((r, i) => ({ row: i + 2, id: r[0] || '', due: String(r[1] || '').slice(0, 10), from: r[2] || '', amount: r[3] || '', desc: r[4] || '', paid: bool(r[5]) })).filter((b) => b.from || b.due)
+      };
+      S.sheetError = ''; store.set('nt.sheetdata', S.sheet);
+    } catch (e) {
+      if (e instanceof AuthError) return;
+      if (e.status === 403 || e.status === 404) S.sheetError = 'Brak dostępu do wspólnego arkusza. Poproś drugą osobę o udostępnienie go Twojemu kontu Google (jako edytor).';
+      else if (e.status === 400) S.sheetError = 'Arkusz nie ma wymaganych zakładek. Utwórz nowy w Ustawieniach.';
+      else if (!S.offline) S.sheetError = 'Nie udało się wczytać wspólnego arkusza.';
+    }
+  };
+  const sheetWrite = async (fn) => {
+    try { await fn(); await loadSheet(); }
+    catch (e) { if (!(e instanceof AuthError)) S.sheetError = S.offline ? 'Brak połączenia — zmiana nie została zapisana.' : 'Nie udało się zapisać zmiany w arkuszu.'; }
+    draw();
+  };
+  const vPut = (range, values) => gfetch(SHEETS + S.sheetId + '/values/' + encodeURIComponent(range) + '?valueInputOption=RAW', { method: 'PUT', body: JSON.stringify({ values }) });
+  const vAppend = (range, values) => gfetch(SHEETS + S.sheetId + '/values/' + encodeURIComponent(range) + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', { method: 'POST', body: JSON.stringify({ values }) });
+  const vClear = (range) => gfetch(SHEETS + S.sheetId + '/values/' + encodeURIComponent(range) + ':clear', { method: 'POST', body: '{}' });
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  const listAdd = (tab) => {
+    const inp = $('add-' + tab); const name = inp.value.trim(); if (!name || !S.sheet) return;
+    inp.value = '';
+    S.sheet[tab].push({ row: 0, id: 'tmp', name, done: false, by: myName() }); draw();
+    sheetWrite(() => vAppend(`'${tab}'!A:E`, [[uid(), name, false, myName(), new Date().toISOString()]]));
+  };
+  const listToggle = (tab, item) => { item.done = !item.done; draw(); sheetWrite(() => vPut(`'${tab}'!C${item.row}`, [[item.done]])); };
+  const listClear = (tab) => {
+    if (!S.sheet) return;
+    const keep = S.sheet[tab].filter((x) => !x.done);
+    if (keep.length === S.sheet[tab].length) return;
+    S.sheet[tab] = keep; draw();
+    sheetWrite(async () => { await vClear(`'${tab}'!A2:E`); if (keep.length) await vPut(`'${tab}'!A2`, keep.map((x) => [x.id, x.name, false, x.by, x.at])); });
+  };
+  const upsert = (tab, key, val) => {
+    const cur = S.sheet[tab][key];
+    S.sheet[tab][key] = { row: cur ? cur.row : 0, val }; draw();
+    sheetWrite(() => (cur ? vPut(`'${tab}'!B${cur.row}`, [[val]]) : vAppend(`'${tab}'!A:B`, [[key, val]])));
+  };
+  const billToggle = (b) => { b.paid = !b.paid; draw(); sheetWrite(() => vPut(`'Rachunki'!F${b.row}`, [[b.paid]])); };
+  document.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => listAdd(b.dataset.add); });
+  document.querySelectorAll('[data-clear]').forEach((b) => { b.onclick = () => listClear(b.dataset.clear); });
+  ['Zakupy', 'Sprawy'].forEach((t) => { $('add-' + t).addEventListener('keydown', (e) => { if (e.key === 'Enter') listAdd(t); }); });
+
+  const createSheet = async () => {
+    const body = {
+      properties: { title: 'Nasz tydzień — wspólne', locale: 'pl_PL', timeZone: TZ },
+      sheets: Object.entries(TABS).map(([title, head]) => ({ properties: { title, gridProperties: { frozenRowCount: 1 } }, data: [{ startRow: 0, startColumn: 0, rowData: [{ values: head.map((h) => ({ userEnteredValue: { stringValue: h }, userEnteredFormat: { textFormat: { bold: true } } })) }] }] }))
+    };
+    const res = await gfetch(SHEETS, { method: 'POST', body: JSON.stringify(body) });
+    return res.spreadsheetId;
+  };
+
+  // ---------- dodawanie wydarzeń ----------
+  const writable = () => S.calendars.filter((c) => c.canWrite && !c.birthdays);
+  const openEvent = (key) => {
+    const sel = $('ev-cal'); sel.replaceChildren();
+    writable().forEach((c) => { const o = el('option', null, c.summary); o.value = c.id; sel.append(o); });
+    if (S.prefs.addCal && writable().some((c) => c.id === S.prefs.addCal)) sel.value = S.prefs.addCal;
+    $('ev-title').value = ''; $('ev-loc').value = ''; $('ev-allday').checked = false;
+    $('ev-sd').value = key; $('ev-ed').value = key; $('ev-st').value = '09:00'; $('ev-et').value = '10:00';
+    $('ev-err').hidden = true; syncAllDay();
+    $('evdlg').showModal(); setTimeout(() => $('ev-title').focus(), 50);
+  };
+  const syncAllDay = () => { const a = $('ev-allday').checked; $('ev-st-f').hidden = a; $('ev-et-f').hidden = a; };
+  $('ev-allday').onchange = syncAllDay;
+  $('ev-sd').onchange = () => { if ($('ev-ed').value < $('ev-sd').value) $('ev-ed').value = $('ev-sd').value; };
+  $('ev-cancel').onclick = () => $('evdlg').close();
+  $('ev-save').onclick = async () => {
+    const err = $('ev-err'); err.hidden = true;
+    const title = $('ev-title').value.trim(), calId = $('ev-cal').value, sd = $('ev-sd').value, ed = $('ev-ed').value || sd, allDay = $('ev-allday').checked;
+    if (!title) { err.textContent = 'Wpisz tytuł.'; err.hidden = false; return; }
+    if (!calId) { err.textContent = 'Brak kalendarza z prawem edycji.'; err.hidden = false; return; }
+    const body = { summary: title };
+    if ($('ev-loc').value.trim()) body.location = $('ev-loc').value.trim();
+    if (allDay) { body.start = { date: sd }; body.end = { date: ymd(addDays(parseYmd(ed), 1)) }; }
+    else {
+      const st = $('ev-st').value || '09:00', et = $('ev-et').value || '10:00';
+      if (`${ed}T${et}` <= `${sd}T${st}`) { err.textContent = 'Koniec musi być po początku.'; err.hidden = false; return; }
+      body.start = { dateTime: `${sd}T${st}:00`, timeZone: TZ }; body.end = { dateTime: `${ed}T${et}:00`, timeZone: TZ };
+    }
+    $('ev-save').disabled = true;
+    try {
+      await gfetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events', { method: 'POST', body: JSON.stringify(body) });
+      S.prefs.addCal = calId; store.set('nt.prefs', S.prefs);
+      $('evdlg').close();
+      await Promise.all([fetchWeek(), fetchSoon()]); draw();
+    } catch (e) { err.textContent = S.offline ? 'Brak połączenia z internetem.' : 'Nie udało się dodać wydarzenia.'; err.hidden = false; }
+    finally { $('ev-save').disabled = false; }
+  };
+
+  // ---------- ustawienia ----------
+  const sheetUrl = () => 'https://docs.google.com/spreadsheets/d/' + S.sheetId + '/edit';
+  const syncSheetInfo = () => {
+    const has = !!S.sheetId;
+    $('set-sheetinfo').textContent = has ? 'Połączony. Udostępnij go drugiej osobie w Google Sheets jako edytorowi, a potem wyślij jej link z przycisku poniżej.' : 'Zakupy, sprawy, odbiór Zosi, jadłospis i rachunki zapisują się we wspólnym arkuszu Google.';
+    $('set-open').hidden = !has; $('set-copy').hidden = !has; $('set-unlink').hidden = !has; $('set-create').hidden = has;
+  };
+  $('settings').onclick = () => {
+    $('set-name').value = S.prefs.name || ''; $('set-sheet').value = '';
+    const tb = $('set-cals'); tb.replaceChildren();
+    S.calendars.filter((c) => !c.zosia).forEach((c) => {
+      const tr = el('tr'); const n = el('td'); const nm = el('span', 'nm'); const d = el('i', 'dot'); d.style.background = c.color; d.style.marginTop = '0'; nm.append(d, c.summary); n.append(nm); tr.append(n);
+      ['week', 'count'].forEach((k) => { const td = el('td'); const cb = el('input'); cb.type = 'checkbox'; cb.dataset.kind = k; cb.dataset.id = c.id; cb.checked = prefOn(k, c.id); td.append(cb); tr.append(td); });
+      tb.append(tr);
+    });
+    syncSheetInfo(); $('setdlg').showModal();
+  };
+  $('set-cancel').onclick = () => $('setdlg').close();
+  $('set-open').onclick = () => window.open(sheetUrl(), '_blank', 'noopener');
+  $('set-copy').onclick = async () => {
+    const link = location.origin + location.pathname + '#arkusz=' + S.sheetId;
+    try { await navigator.clipboard.writeText(link); $('set-copy').textContent = 'Skopiowano ✓'; } catch { window.prompt('Skopiuj ten link:', link); }
+    setTimeout(() => { $('set-copy').textContent = 'Skopiuj link dla drugiej osoby'; }, 2500);
+  };
+  $('set-unlink').onclick = () => { S.sheetId = ''; S.sheet = null; store.del('nt.sheet'); store.del('nt.sheetdata'); syncSheetInfo(); draw(); };
+  $('set-create').onclick = async () => {
+    $('set-create').disabled = true; $('set-create').textContent = 'Tworzę…';
+    try { S.sheetId = await createSheet(); store.set('nt.sheet', S.sheetId); await loadSheet(); syncSheetInfo(); draw(); }
+    catch { $('set-sheetinfo').textContent = 'Nie udało się utworzyć arkusza. Sprawdź, czy w Google Cloud włączone jest Google Sheets API.'; }
+    finally { $('set-create').disabled = false; $('set-create').textContent = 'Utwórz nowy arkusz'; }
+  };
+  $('set-save').onclick = async () => {
+    S.prefs.name = $('set-name').value.trim();
+    S.prefs.week = {}; S.prefs.count = {};
+    $('set-cals').querySelectorAll('input').forEach((cb) => { if (!cb.checked) S.prefs[cb.dataset.kind][cb.dataset.id] = false; });
+    store.set('nt.prefs', S.prefs);
+    const m = $('set-sheet').value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/) || $('set-sheet').value.trim().match(/^([A-Za-z0-9_-]{30,})$/);
+    if (m) { S.sheetId = m[1]; store.set('nt.sheet', S.sheetId); S.sheet = null; }
+    $('setdlg').close();
+    if (S.token) { await Promise.all([fetchWeek(), fetchSoon(), loadSheet()]); }
+    draw();
+  };
+
+  // ---------- rysowanie ----------
+  const DAYS = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek'];
+  const SHORT = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt'];
+  const subjColor = { 'Matematyka': 0, 'Język polski': 1, 'Język angielski': 2, 'Angielski Early Stage': 2, 'Przyroda': 3, 'Wychowanie fizyczne': 4, 'Język niemiecki': 5, 'Informatyka': 6, 'Historia': 7 };
+  let zSel = (() => { const wd = new Date().getDay(); return wd >= 1 && wd <= 5 ? wd : 1; })();
+
+  const slots = () => {
+    const by = new Map();
+    if (!S.bundle) return by;
+    for (let d = parseYmd(S.bundle.from); ymd(d) < S.bundle.to; d = addDays(d, 1)) by.set(ymd(d), { events: [], holidays: [] });
+    S.bundle.events.forEach((e) => {
+      const days = eventDays(e);
+      days.forEach((k) => {
+        const s = by.get(k); if (!s) return;
+        if (e.holiday) s.holidays.push(e);
+        else s.events.push({ ...e, _label: timeLabel(e, days, k), _full: e.all_day || k !== days[0] });
+      });
+    });
+    by.forEach((s) => s.events.sort((a, b) => (a._full === b._full ? a.start.localeCompare(b.start) : a._full ? -1 : 1)));
+    return by;
+  };
+  const schoolSpan = (key) => {
+    const rows = (S.bundle ? S.bundle.zLessons : []).filter((r) => r.key === key);
+    if (!rows.length) return null;
+    return `${rows.reduce((m, r) => (r.start < m ? r.start : m), '99:99')}–${rows.reduce((m, r) => (r.end > m ? r.end : m), '00:00')}`;
+  };
+  const evItem = (e) => {
+    const item = el(e.link ? 'a' : 'div', 'ev' + (e._full && !e.all_day ? ' cont' : ''));
+    if (e.link) { item.href = e.link; item.target = '_blank'; item.rel = 'noopener'; }
+    const dot = el('i', 'dot'); dot.style.background = e.color;
+    const body = el('div');
+    body.append(el('div', 'ev-time', (e.birthday ? '🎂 ' : '') + e._label), el('div', 'ev-title', e.title));
+    if (e.location) body.append(el('div', 'ev-loc', e.location));
+    item.append(dot, body); return item;
+  };
+  const schoolLine = (key) => {
+    const span = schoolSpan(key); if (!span) return null;
+    const s = el('div', 'school'); s.append(el('b', null, 'Zosia'), document.createTextNode(`szkoła ${span}`));
+    if (S.sheet) {
+      const cur = (S.sheet.Odbiory[key] || {}).val || '';
+      const mine = cur && cur === myName();
+      const chip = el('button', 'chip' + (mine ? ' mine' : cur ? '' : ' none'), cur ? `odbiera: ${mine ? 'ja' : cur}` : 'kto odbiera?');
+      chip.title = mine ? 'Kliknij, żeby zwolnić' : 'Kliknij: ja odbieram';
+      chip.onclick = () => upsert('Odbiory', key, mine ? '' : myName());
+      s.append(chip);
+    }
+    return s;
+  };
+  const mealLine = (key) => {
+    if (!S.sheet) return null;
+    const cur = (S.sheet['Jadłospis'][key] || {}).val || '';
+    const b = el('button', 'meal' + (cur ? '' : ' none'), cur ? `🍽 ${cur}` : '🍽 obiad?');
+    b.onclick = () => { const v = window.prompt('Obiad — ' + fDayL.format(parseYmd(key)), cur); if (v !== null && v.trim() !== cur) upsert('Jadłospis', key, v.trim()); };
+    return b;
+  };
+  const plusBtn = (key) => {
+    if (!S.token || !writable().length) return null;
+    const b = el('button', 'plus', '+'); b.setAttribute('aria-label', 'Dodaj wydarzenie'); b.onclick = () => openEvent(key); return b;
+  };
+
+  const drawToday = (by) => {
+    const box = $('today'); const key = todayKey(); const s = by.get(key);
+    if (!s) { box.hidden = true; return; }
+    box.hidden = false; box.replaceChildren();
+    const d = parseYmd(key);
+    const head = el('div', 'today-head');
+    const dt = el('div', 'today-date'); dt.append(el('small', null, 'Dziś'), document.createTextNode(`${fWd.format(d)}, ${fDayL.format(d)}`));
+    head.append(dt);
+    const w = S.weather && S.weather.days[key];
+    if (w) { const wx = el('div', 'today-wx'); wx.append(el('b', null, `${WX(w.code)[0]} ${Math.round(w.max)}°`), document.createTextNode(`${WX(w.code)[1]} · min ${Math.round(w.min)}°${w.pop >= 20 ? ` · deszcz ${w.pop}%` : ''}`)); head.append(wx); }
+    box.append(head);
+    s.holidays.forEach((h) => box.append(el('div', 'holiday', h.title)));
+    const sl = schoolLine(key); if (sl) box.append(sl);
+    const ml = mealLine(key); if (ml) box.append(ml);
+    s.events.forEach((e) => box.append(evItem(e)));
+    if (!s.events.length && !s.holidays.length && !sl) box.append(el('div', 'empty', 'Nic w kalendarzu na dziś.'));
+    const p = plusBtn(key); if (p) { p.textContent = '+ Dodaj wydarzenie'; p.className = 'btn'; p.style.alignSelf = 'flex-start'; box.append(p); }
+  };
+
+  const drawWeek = (by) => {
+    const week = $('week'); week.replaceChildren();
+    const legend = $('legend'); legend.replaceChildren();
+    const lg = (color, text, sq) => { const s = el('span'); const d = el('i', 'dot'); d.style.background = color; d.style.marginTop = '0'; if (sq) d.style.borderRadius = '2px'; s.append(d, text); legend.append(s); };
+    weekCals().forEach((c) => lg(c.color, c.summary));
+    if (zosiaCal()) lg('var(--c2)', 'Szkoła Zosi', true);
+    const tk = todayKey();
+    for (let i = 0; i < 7; i++) {
+      const key = ymd(addDays(S.monday, i)); const s = by.get(key) || { events: [], holidays: [] };
+      const d = parseYmd(key); const wd = d.getDay();
+      const box = el('div', 'day' + (wd === 0 || wd === 6 ? ' weekend' : '') + (key === tk ? ' today-box' : '') + (key < tk ? ' past' : ''));
+      const head = el('div', 'dayhead');
+      const left = el('span'); left.append(el('b', null, fWd.format(d)), document.createTextNode(' '), key === tk ? el('span', 'tag', 'dziś') : el('span', null, fDay.format(d)));
+      const right = el('span', 'dh-right'); const p = plusBtn(key); if (p) right.append(p);
+      head.append(left, right); box.append(head);
+      const wx = wxShort(key); if (wx) box.append(wx);
+      s.holidays.forEach((h) => box.append(el('div', 'holiday', h.title)));
+      const sl = schoolLine(key); if (sl) box.append(sl);
+      const ml = mealLine(key); if (ml) box.append(ml);
+      s.events.forEach((e) => box.append(evItem(e)));
+      if (!s.events.length && !s.holidays.length && !sl && !ml) box.append(el('div', 'empty', 'Wolne'));
+      week.append(box);
+    }
+    $('weekerr').hidden = !S.weekError; $('weekerr').textContent = S.weekError;
+  };
+
+  const drawSoon = () => {
+    const box = $('soon'); box.replaceChildren();
+    const tk = todayKey();
+    const items = (S.soon ? S.soon.items : []).filter((x) => x.last >= tk);
+    $('soonbox').hidden = !items.length;
+    items.forEach((x) => {
+      const n = dayDiff(tk, x.first);
+      const when = n <= 0 ? (x.last > tk ? `trwa · do ${fDay.format(parseYmd(x.last))}` : 'dziś') : n === 1 ? 'jutro' : `za ${n} ${n < 5 ? 'dni' : 'dni'}`;
+      const it = el(x.link ? 'a' : 'div', 'soon-item'); if (x.link) { it.href = x.link; it.target = '_blank'; it.rel = 'noopener'; it.style.textDecoration = 'none'; it.style.color = 'inherit'; }
+      it.style.borderTop = `3px solid ${x.color}`;
+      it.append(el('div', 'soon-when', when), el('div', 'soon-title', (x.birthday ? '🎂 ' : '') + x.title), el('div', 'soon-date', `${fWdS.format(parseYmd(x.first))} ${fDay.format(parseYmd(x.first))}${x.last !== x.first ? ' – ' + fDay.format(parseYmd(x.last)) : ''}`));
+      box.append(it);
+    });
+  };
+
+  const drawShared = () => {
+    $('shared').hidden = !S.sheet;
+    $('sheeterr').hidden = !S.sheetError; $('sheeterr').textContent = S.sheetError;
+    if (!S.sheet) return;
+    ['Zakupy', 'Sprawy'].forEach((tab) => {
+      const ul = $('list-' + tab); ul.replaceChildren();
+      const items = [...S.sheet[tab]].sort((a, b) => a.done - b.done);
+      if (!items.length) ul.append(el('li', 'empty', tab === 'Zakupy' ? 'Lista jest pusta.' : 'Nic do zrobienia.'));
+      items.forEach((x) => {
+        const li = el('li', x.done ? 'done' : null);
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = x.done; cb.disabled = !x.row; cb.onchange = () => listToggle(tab, x);
+        li.append(cb, el('span', 'nm', x.name), el('span', 'by', x.by)); ul.append(li);
+      });
+    });
+    const ul = $('bills'); ul.replaceChildren();
+    const tk = todayKey(); const weekEnd = ymd(addDays(mondayOf(new Date()), 7));
+    const bills = S.sheet.Rachunki.filter((b) => !b.paid || (b.due && b.due >= ymd(addDays(new Date(), -7)))).sort((a, b) => (a.paid - b.paid) || (a.due || '9').localeCompare(b.due || '9'));
+    if (!bills.length) ul.append(el('li', 'empty', 'Brak rachunków do zapłaty.'));
+    bills.forEach((b) => {
+      const li = el('li', b.paid ? 'done' : null);
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = b.paid; cb.onchange = () => billToggle(b);
+      const cls = b.paid ? '' : b.due && b.due < tk ? ' bad' : b.due && b.due < weekEnd ? ' warn' : '';
+      const nm = el('span', 'nm'); nm.append(document.createTextNode(b.from)); if (b.desc) nm.append(el('div', 'by', b.desc));
+      const amt = Number(String(b.amount).replace(/\s/g, '').replace(',', '.'));
+      li.append(cb, nm, el('span', 'bill-due' + cls, b.due ? (b.due < tk && !b.paid ? 'po terminie · ' : '') + fDay.format(parseYmd(b.due)) : 'bez terminu'), el('span', 'amt', b.amount === '' ? '' : isNaN(amt) ? String(b.amount) : fPLN.format(amt)));
+      ul.append(li);
+    });
+  };
+
+  const drawZosia = () => {
+    const wk = new Set(Array.from({ length: 7 }, (_, i) => ymd(addDays(S.monday, i))));
+    const lessons = (S.bundle ? S.bundle.zLessons : []).filter((r) => wk.has(r.key) && r.wd >= 1 && r.wd <= 5);
+    $('zosia').hidden = !lessons.length; if (!lessons.length) return;
+    const tabs = $('ztabs'); tabs.replaceChildren();
+    SHORT.forEach((s, i) => { const b = el('button', 'tab', s); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(zSel === i + 1)); b.title = DAYS[i]; b.onclick = () => { zSel = i + 1; drawZosia(); }; tabs.append(b); });
+    const list = $('zlist'); list.replaceChildren();
+    const rows = lessons.filter((r) => r.wd === zSel).sort((a, b) => a.start.localeCompare(b.start));
+    if (!rows.length) list.append(el('li', 'empty', 'Brak lekcji w tym dniu'));
+    rows.forEach((r) => {
+      const li = el('li', r.place ? 'extra' : null); li.append(el('span', 't', `${r.start}–${r.end}`));
+      const s = el('span', 's', r.subject); s.style.borderLeftColor = subjColor[r.subject] != null ? `var(--c${subjColor[r.subject]})` : 'var(--c7)';
+      if (r.place) s.append(el('small', null, r.place));
+      li.append(s); list.append(li);
+    });
+  };
+
+  const drawGate = () => {
+    const gate = $('gate'); const g = $('gate-text'); g.replaceChildren();
+    const hasData = !!S.bundle;
+    if (S.token) { gate.hidden = true; return; }
+    gate.hidden = false; gate.classList.toggle('banner', hasData);
+    if (CLIENT_ID.startsWith('WKLEJ')) {
+      const p = el('p'); p.append('Aplikacja nie jest jeszcze skonfigurowana. Wpisz identyfikator klienta Google w stałej ', el('code', null, 'CLIENT_ID'), '.');
+      g.append(p); $('signin').hidden = true; return;
+    }
+    g.append(el('p', null, hasData ? 'Pokazuję ostatnio zapisane dane. Zaloguj się, żeby odświeżyć.' : 'Zaloguj się kontem Google, na którym masz udostępnione rodzinne kalendarze.'));
+    $('signin').hidden = !tokenClient;
+  };
+
+  const draw = () => {
+    $('range').textContent = `${fDay.format(S.monday)} – ${fDayY.format(addDays(S.monday, 6))}`;
+    const st = $('status');
+    st.classList.toggle('off', S.offline);
+    st.textContent = S.bundle ? `${S.offline ? 'Offline — dane z ' : 'Zaktualizowano '}${fStamp.format(new Date(S.bundle.at))}` : '';
+    const by = slots();
+    $('weekbox').hidden = !S.bundle && !S.token;
+    drawGate(); drawToday(by); drawSoon(); drawWeek(by); drawShared(); drawZosia();
+    $('settings').hidden = !S.token; $('signout').hidden = !S.token && !store.get('nt.signedin', false);
+    $('who').textContent = S.email ? `Zalogowano: ${S.email}` : '';
+  };
+
+  // ---------- odświeżanie ----------
+  let busy = false;
+  const refreshAll = async () => {
+    fetchWeather().then(draw);
+    if (!S.token || busy) { draw(); return; }
+    busy = true; $('week').classList.add('loading'); draw();
+    try {
+      await loadCalendars();
+      await Promise.all([fetchWeek(), fetchSoon(), loadSheet()]);
+    } catch (e) { if (!(e instanceof AuthError) && !S.offline) S.weekError = 'Nie udało się pobrać listy kalendarzy.'; }
+    busy = false; $('week').classList.remove('loading'); draw();
+  };
+  const goWeek = async (mon) => {
+    S.monday = mon; loadBundle(); S.weekError = ''; draw();
+    if (S.token) { $('week').classList.add('loading'); await fetchWeek(); $('week').classList.remove('loading'); draw(); }
+  };
+  $('prev').onclick = () => goWeek(addDays(S.monday, -7));
+  $('next').onclick = () => goWeek(addDays(S.monday, 7));
+  $('thisweek').onclick = () => goWeek(defaultMonday());
+  $('refresh').onclick = () => { if (S.weather) S.weather.at = 0; refreshAll(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (S.token && Date.now() > S.token.exp) { dropToken(); return; }
+    refreshAll();
+  });
+  window.addEventListener('online', () => { S.offline = false; refreshAll(); });
+  window.addEventListener('offline', () => { S.offline = true; draw(); });
+
+  // ---------- start ----------
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  const saved = store.get('nt.token', null);
+  if (saved && saved.exp > Date.now() && !CLIENT_ID.startsWith('WKLEJ')) S.token = saved; else store.del('nt.token');
+  if (!navigator.onLine) S.offline = true;
+  loadBundle();
+  draw();
+  initAuth();
+  refreshAll();
+})();
+</script>
+</body>
+</html>
